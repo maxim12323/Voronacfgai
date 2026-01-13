@@ -8,7 +8,7 @@ from openai import OpenAI
 from aiohttp import web
 
 # --- НАСТРОЙКИ ---
-TELEGRAM_TOKEN = "8539550683:AAFlcuC4UCWWS3A_d3x_wLz85-2x0T_4lr4"
+TELEGRAM_TOKEN = "8125676444:AAHoGTJlsr7OBtp-BFg50L4h7m8XJyn2UCY"
 SAMBANOVA_API_KEY = "2d2954e5-1b83-443e-96ec-df7bb9ac8613"
 KNOWLEDGE_BASE_PATH = "instruction.txt"
 
