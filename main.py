@@ -4,54 +4,52 @@ import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.utils.chat_action import ChatActionSender
-from openai import AsyncOpenAI  # Заменено на асинхронный клиент
+from gigachat import GigaChat 
 from aiohttp import web
 
 # --- НАСТРОЙКИ ---
 TELEGRAM_TOKEN = "8125676444:AAHoGTJlsr7OBtp-BFg50L4h7m8XJyn2UCY"
-SAMBANOVA_API_KEY = "2d2954e5-1b83-443e-96ec-df7bb9ac8613"
+# Вставь сюда свой длинный ключ Authorization key (Base64)
+GIGACHAT_CREDENTIALS = "MDE5YmMxY2YtZmNhMy03ZGZmLWFkZTctZjMwMzUzYjllYzg5OjVkODMxNGRiLTgyMDktNGIyNS04ZTJlLWFlNjg0ZmNmMThmMQ==" 
 KNOWLEDGE_BASE_PATH = "instruction.txt"
 
-# Инициализация асинхронного клиента ИИ (SambaNova)
-client = AsyncOpenAI(
-    api_key=SAMBANOVA_API_KEY, 
-    base_url="https://api.sambanova.ai/v1"
-)
-
-# Инициализация бота
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# --- БЛОК ДЛЯ СТАБИЛЬНОЙ РАБОТЫ (HEALTH CHECK) ---
+# --- ВСПОМОГАТЕЛЬНЫЙ СЕРВЕР ---
 async def handle_health_check(request):
-    return web.Response(text="Bot is running!", status=200)
+    return web.Response(text="Штаб VoronaAi в полной боевой готовности! 🪂", status=200)
 
-async def start_koyeb_helper():
+async def start_web_server():
     app = web.Application()
     app.router.add_get('/', handle_health_check)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8000)
     await site.start()
-    logging.info("Health check server started on port 8000")
 
-# --- ЛОГИКА БАЗЫ ЗНАНИЙ ---
+# --- ЧТЕНИЕ БАЗЫ ЗНАНИЙ ---
 def get_knowledge_base():
     try:
         if os.path.exists(KNOWLEDGE_BASE_PATH):
             with open(KNOWLEDGE_BASE_PATH, "r", encoding="utf-8") as f:
                 content = f.read().strip()
                 return content if content else "Инструкция пуста."
-        return "Файл инструкции не найден."
+        return "Файл тактических указаний не найден."
     except Exception as e:
-        return f"Ошибка чтения файла: {e}"
+        return f"Ошибка связи с архивом: {e}"
 
-# --- ОБРАБОТЧИКИ КОМАНД ---
+# --- ОБРАБОТЧИКИ ---
+
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
-    await message.answer("Бот успешно запущен и готов к работе! Задавайте вопросы по инструкции.")
+    await message.answer(
+        "Приветствую, боец! 🫡\n\n"
+        "Я твой тактический ИИ-напарник по PUBG Mobile. Рад видеть тебя в строю! ✨\n\n"
+        "Я помогу тебе разобраться в механиках, подскажу инфу из нашей базы знаний или просто дам совет по выживанию. "
+        "Готов к высадке? Задавай свой вопрос! Удачной катки и вкусного обеда! 🍗"
+    )
 
-# --- ОСНОВНОЙ ОБРАБОТЧИК ---
 @dp.message()
 async def handle_message(message: types.Message):
     if not message.text:
@@ -59,43 +57,45 @@ async def handle_message(message: types.Message):
 
     kb_content = get_knowledge_base()
 
-    # Показываем статус "печатает", пока ждем ответ от SambaNova
+    # Анимация "печатает..." для живого общения
     async with ChatActionSender.typing(bot=bot, chat_id=message.chat.id):
         try:
-            # Асинхронный запрос к нейросети
-            response = await client.chat.completions.create(
-                model="Meta-Llama-3.1-8B-Instruct",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": f"Ты строгий помощник. Отвечай ТОЛЬКО на основе этого текста: {kb_content}. Если ответа в тексте нет, вежливо скажи, что не знаешь."
-                    },
-                    {"role": "user", "content": message.text}
-                ],
-                temperature=0.7
-            )
-            
-            answer = response.choices[0].message.content
-            await message.answer(answer)
-            
+            # Подключаемся к GigaChat (scope для физлиц)
+            with GigaChat(credentials=GIGACHAT_CREDENTIALS, verify_ssl_certs=False, scope='GIGACHAT_API_PERS') as giga:
+                response = giga.chat({
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Ты — самый вежливый, добрый и при этом профессиональный тактический ассистент по PUBG Mobile. "
+                                "Твой стиль: дружелюбный напарник (бро), который всегда готов помочь. "
+                                "Используй геймерский сленг (лут, зона, катка, дроп, фраги), но оставайся воспитанным. "
+                                f"Твои главные данные: {kb_content}. "
+                                "ПРАВИЛА ИГРЫ: "
+                                "1. Если ответ есть в базе знаний — выдавай его максимально понятно и вежливо. "
+                                "2. Если в базе ответа нет — не бросай бойца! Используй свои знания о PUBG Mobile, "
+                                "чтобы дать крутой тактический совет или просто поддержать беседу. "
+                                "Добавляй эмодзи (🔫, 🎒, 🚁, 🍗, 🔥) и старайся поднять настроение пользователю!"
+                            )
+                        },
+                        {"role": "user", "content": message.text}
+                    ],
+                    "temperature": 0.8 # Чтобы ответы были живыми и разными
+                })
+                
+                answer = response.choices[0].message.content
+                await message.answer(answer)
+
         except Exception as e:
-            logging.error(f"Ошибка ИИ: {e}")
-            # Отправляем краткое описание ошибки в чат для отладки
-            await message.answer(f"⚠️ Ошибка при запросе к ИИ. Проверьте логи сервера.")
+            logging.error(f"GigaChat Error: {e}")
+            await message.answer("Ой, боец, кажется рация барахлит! 📡 Попробуй отправить запрос еще раз, я обязательно отвечу!")
 
 # --- ЗАПУСК ---
 async def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
-    )
-    
-    # Запуск веб-сервера (для Koyeb/Bothost)
-    await start_koyeb_helper()
-    
-    logging.info("Бот запускается...")
-    # Удаляем вебхуки перед запуском polling, чтобы не было конфликтов
+    logging.basicConfig(level=logging.INFO)
+    await start_web_server()
     await bot.delete_webhook(drop_pending_updates=True)
+    logging.info("Тактический GigaChat-бот запущен!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
@@ -103,4 +103,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.info("Бот остановлен")
-        
